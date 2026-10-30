@@ -266,7 +266,7 @@
       </div>
 
       <div class="ssh-box">
-        <div style="font-size:0.8rem; font-weight:600;">Подключение по SSH (IP/порт/логин с платы)</div>
+        <div style="font-size:0.8rem; font-weight:600;">Связь с дроном: IP + мост :9090 (орги: HTTP вызывает ROS get_telemetry). SSH — запасной путь.</div>
         <div class="ssh-row">
           <span class="ssh-label">Дрон 1</span>
           <input id="ssh1user" placeholder="user (sverk / orangepi)" value="sverk">
@@ -277,8 +277,8 @@
           <span></span>
           <input id="ssh1pass" type="password" placeholder="пароль (пусто = ключ)">
           <input id="ssh1dir" placeholder="папка на плате" value="/home/sverk/mission">
-          <button class="btn-sm" onclick="UI.connectDrone(1)">Подключить</button>
-          <button class="btn-sm" onclick="UI.testLog(1)">Пинг Сверх</button>
+          <button class="btn-sm" onclick="UI.connectDrone(1)">SSH</button>
+          <button class="btn-sm" onclick="UI.probeBridge(1)">Мост 9090</button>
         </div>
         <div class="ssh-status" id="ssh1status">не подключали</div>
         <div class="ssh-row">
@@ -291,8 +291,8 @@
           <span></span>
           <input id="ssh2pass" type="password" placeholder="пароль (пусто = ключ)">
           <input id="ssh2dir" placeholder="папка на плате" value="/home/sverk/mission">
-          <button class="btn-sm" onclick="UI.connectDrone(2)">Подключить</button>
-          <button class="btn-sm" onclick="UI.testLog(2)">Пинг Сверх</button>
+          <button class="btn-sm" onclick="UI.connectDrone(2)">SSH</button>
+          <button class="btn-sm" onclick="UI.probeBridge(2)">Мост 9090</button>
         </div>
         <div class="ssh-status" id="ssh2status">не подключали</div>
       </div>
@@ -609,7 +609,8 @@
           host: document.getElementById('ssh' + n + 'host').value,
           port: document.getElementById('ssh' + n + 'port').value,
           password: document.getElementById('ssh' + n + 'pass').value,
-          remote_dir: document.getElementById('ssh' + n + 'dir').value
+          remote_dir: document.getElementById('ssh' + n + 'dir').value,
+          bridge_port: 9090
         };
       },
 
@@ -627,6 +628,21 @@
           const port = document.getElementById('ssh' + n + 'port');
           if (port && !port.matches(':focus')) port.value = L.port || port.value;
         });
+      },
+
+      async probeBridge(droneId) {
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Стучусь на мост :9090...' });
+        try {
+          const r = await fetch('/api/bridge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'bridge fail' });
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
       },
 
       async connectDrone(droneId) {

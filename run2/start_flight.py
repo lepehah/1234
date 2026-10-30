@@ -8,6 +8,8 @@ import shutil
 import socket
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -26,6 +28,7 @@ LINKS: Dict[int, dict] = {
         "port": int(os.environ.get("DRONE1_PORT", "22")),
         "password": os.environ.get("DRONE1_PASSWORD", ""),
         "remote_dir": os.environ.get("REMOTE_DIR", "/home/sverk/mission"),
+        "bridge_port": int(os.environ.get("DRONE1_BRIDGE", "9090")),
         "status": "offline",
         "detail": "ещё не подключали",
     },
@@ -35,6 +38,7 @@ LINKS: Dict[int, dict] = {
         "port": int(os.environ.get("DRONE2_PORT", "22")),
         "password": os.environ.get("DRONE2_PASSWORD", ""),
         "remote_dir": os.environ.get("REMOTE_DIR", "/home/sverk/mission"),
+        "bridge_port": int(os.environ.get("DRONE2_BRIDGE", "9090")),
         "status": "offline",
         "detail": "ещё не подключали",
     },
@@ -88,6 +92,8 @@ def update_link(drone_id: int, data: dict) -> dict:
         cfg["password"] = str(data["password"])
     if data.get("remote_dir"):
         cfg["remote_dir"] = str(data["remote_dir"]).strip()
+    if data.get("bridge_port"):
+        cfg["bridge_port"] = int(data["bridge_port"])
     return cfg
 
 
@@ -217,6 +223,43 @@ def connect_drone(drone_id: int) -> dict:
         cfg["detail"] = str(exc)
         mlog.error("дрон%s connect: %s", drone_id, exc)
         return {"ok": False, "error": str(exc), **public_links()[str(drone_id)]}
+
+
+def probe_bridge(drone_id: int) -> dict:
+    """Мост Сверх на плате: HTTP :9090, сервис get_telemetry как в Python."""
+    cfg = LINKS[int(drone_id)]
+    host = cfg["host"]
+    port = int(cfg.get("bridge_port") or 9090)
+    url = f"http://{host}:{port}/"
+    cfg["status"] = "checking"
+    cfg["detail"] = f"мост {url}"
+    try:
+        probe_tcp(host, port, timeout=2.0)
+    except Exception as exc:
+        cfg["status"] = "error"
+        cfg["detail"] = str(exc)
+        return {"ok": False, "error": str(exc)}
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            snippet = resp.read(240).decode("utf-8", "replace")
+            cfg["status"] = "bridge_ok"
+            cfg["detail"] = f"HTTP {resp.status} {url} {snippet[:80]!r}"
+            return {"ok": True, "detail": cfg["detail"]}
+    except urllib.error.HTTPError as exc:
+        cfg["status"] = "bridge_ok"
+        cfg["detail"] = f"порт {port} отвечает HTTP {exc.code} (мост жив)"
+        return {"ok": True, "detail": cfg["detail"]}
+    except Exception as exc:
+        try:
+            probe_tcp(host, port)
+            cfg["status"] = "bridge_ok"
+            cfg["detail"] = f"TCP {host}:{port} открыт (часто это rosbridge/ws, не REST)"
+            return {"ok": True, "detail": cfg["detail"]}
+        except Exception:
+            cfg["status"] = "error"
+            cfg["detail"] = f"мост {url}: {exc}"
+            return {"ok": False, "error": cfg["detail"]}
 
 
 def ping_drone(drone_id: int) -> str:
