@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+logs/
+**/.askpass*
+*.log
+kultdron/
+.DS_Store
+run2/logs/
+запуск/logs/
