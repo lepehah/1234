@@ -162,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
                     "находка дрон%s %s в (%s,%s)",
                     event.get("drone_id"), event.get("color"), event.get("x"), event.get("y"),
                 )
-            elif path in ("/api/start", "/api/kill", "/api/test-log", "/api/connect", "/api/bridge"):
+            elif path in ("/api/start", "/api/kill", "/api/test-log", "/api/connect", "/api/bridge", "/api/pytest"):
                 pass
             else:
                 mlog.warning("неизвестный POST %s", path)
@@ -183,6 +183,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/bridge":
             self._bridge(data)
+            return
+        if path == "/api/pytest":
+            self._pytest(data)
             return
 
         body = b'{"ok":true}'
@@ -283,6 +286,27 @@ class Handler(BaseHTTPRequestHandler):
                 inject_log(drone_id, f"Мост нет: {result.get('error')}")
 
         threading.Thread(target=worker, name=f"bridge-d{drone_id}", daemon=True).start()
+        self._json(200, {"ok": True, "drone_id": drone_id})
+
+    def _pytest(self, data: dict) -> None:
+        drone_id = int(data.get("drone_id") or 0)
+        if drone_id not in (1, 2):
+            self._json(400, {"ok": False, "error": "нужен drone_id 1 или 2"})
+            return
+        start_flight.update_link(drone_id, data)
+        inject_log(drone_id, "py.test: запускаю 123.py на плате...")
+
+        def worker():
+            try:
+                out = start_flight.run_py_test(drone_id).strip() or "(пусто)"
+                if len(out) > 1500:
+                    out = out[:1500] + "…"
+                inject_log(drone_id, "py.test:\n" + out)
+            except Exception as exc:
+                mlog.exception("py.test дрон%s", drone_id)
+                inject_log(drone_id, f"py.test ошибка: {exc}")
+
+        threading.Thread(target=worker, name=f"pytest-d{drone_id}", daemon=True).start()
         self._json(200, {"ok": True, "drone_id": drone_id})
 
     def _test_log(self, data: dict) -> None:

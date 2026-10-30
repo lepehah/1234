@@ -262,6 +262,30 @@ def probe_bridge(drone_id: int) -> dict:
             return {"ok": False, "error": cfg["detail"]}
 
 
+def run_py_test(drone_id: int) -> str:
+    """Запускает ~/123.py (и соседние корни) на плате, возвращает stdout/stderr."""
+    remote = r"""
+set +e
+found=""
+for f in "$HOME/123.py" ./123.py /home/sverk/123.py /home/orangepi/123.py /root/123.py /123.py; do
+  if [ -f "$f" ]; then
+    found="$f"
+    break
+  fi
+done
+if [ -z "$found" ]; then
+  echo "123.py не найден. Искал: \$HOME/123.py ./123.py /home/sverk /home/orangepi /root /"
+  echo "pwd=$(pwd) HOME=$HOME user=$(id -un)"
+  ls -la "$HOME" 2>/dev/null | head
+  exit 2
+fi
+echo "файл: $found"
+python3 "$found"
+echo "exit:$?"
+"""
+    return _ssh(drone_id, remote, timeout=25, retries=0, check=False)
+
+
 def ping_drone(drone_id: int) -> str:
     cfg = LINKS[int(drone_id)]
     url = ui_url()

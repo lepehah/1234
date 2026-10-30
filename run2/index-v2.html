@@ -113,7 +113,7 @@
       border-radius: 8px; padding: 10px;
     }
     .ssh-row { display: grid; grid-template-columns: 56px 1fr 1fr 70px; gap: 6px; align-items: center; }
-    .ssh-row-2 { display: grid; grid-template-columns: 56px 1fr 1fr auto auto; gap: 6px; align-items: center; }
+    .ssh-row-2 { display: grid; grid-template-columns: 56px 1fr 1fr auto auto auto; gap: 6px; align-items: center; }
     .ssh-box input {
       background: #0b1220; border: 1px solid var(--border-color); color: var(--text-main);
       border-radius: 6px; padding: 6px 8px; font-size: 0.75rem; width: 100%;
@@ -279,6 +279,7 @@
           <input id="ssh1dir" placeholder="папка на плате" value="/home/sverk/mission">
           <button class="btn-sm" onclick="UI.connectDrone(1)">SSH</button>
           <button class="btn-sm" onclick="UI.probeBridge(1)">Мост 9090</button>
+          <button class="btn-sm" onclick="UI.pyTest(1)">py.test</button>
         </div>
         <div class="ssh-status" id="ssh1status">не подключали</div>
         <div class="ssh-row">
@@ -293,6 +294,7 @@
           <input id="ssh2dir" placeholder="папка на плате" value="/home/sverk/mission">
           <button class="btn-sm" onclick="UI.connectDrone(2)">SSH</button>
           <button class="btn-sm" onclick="UI.probeBridge(2)">Мост 9090</button>
+          <button class="btn-sm" onclick="UI.pyTest(2)">py.test</button>
         </div>
         <div class="ssh-status" id="ssh2status">не подключали</div>
       </div>
@@ -628,6 +630,21 @@
           const port = document.getElementById('ssh' + n + 'port');
           if (port && !port.matches(':focus')) port.value = L.port || port.value;
         });
+      },
+
+      async pyTest(droneId) {
+        this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'py.test: 123.py на плате...' });
+        try {
+          const r = await fetch('/api/pytest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.sshPayload(droneId))
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: j.error || 'py.test fail' });
+        } catch (e) {
+          this.renderLogEvent(droneId, { x: 0, y: 0, z: 0, message: 'Панель не отвечает' });
+        }
       },
 
       async probeBridge(droneId) {
